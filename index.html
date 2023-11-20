@@ -6,8 +6,12 @@
         <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-capable" content="yes">
-        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/leaflet.css"><link rel="stylesheet" href="css/L.Control.Locate.min.css">
         <link rel="stylesheet" href="css/qgis2web.css"><link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <link rel="stylesheet" href="css/leaflet-search.css">
+        <link rel="stylesheet" href="css/filter.css">
+<link rel="stylesheet" href="css/nouislider.min.css">
+        <link rel="stylesheet" href="css/leaflet-measure.css">
         <style>
         #map {
             width: 956px;
@@ -20,7 +24,7 @@
         <div id="map">
         </div>
         <script src="js/qgis2web_expressions.js"></script>
-        <script src="js/leaflet.js"></script>
+        <script src="js/leaflet.js"></script><script src="js/L.Control.Locate.min.js"></script>
         <script src="js/multi-style-layer.js"></script>
         <script src="js/leaflet.rotatedMarker.js"></script>
         <script src="js/leaflet.pattern.js"></script>
@@ -29,14 +33,37 @@
         <script src="js/rbush.min.js"></script>
         <script src="js/labelgun.min.js"></script>
         <script src="js/labels.js"></script>
+        <script src="js/leaflet-measure.js"></script>
+        <script src="js/leaflet-search.js"></script>
+        <script src="js/tailDT.js"></script>
+<script src="js/nouislider.min.js"></script>
+<script src="js/wNumb.js"></script>
         <script src="data/FERIAS_AGROubicacin_ferias_agroecolgicas_1.js"></script>
         <script>
+        var highlightLayer;
+        function highlightFeature(e) {
+            highlightLayer = e.target;
+            highlightLayer.openPopup();
+        }
         var map = L.map('map', {
             zoomControl:true, maxZoom:28, minZoom:1
         }).fitBounds([[0.025160262588402066,-78.16477663653826],[0.05955583892590208,-78.12249135325736]]);
         var hash = new L.Hash(map);
         map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
         var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
+        L.control.locate({locateOptions: {maxZoom: 19}}).addTo(map);
+        var measureControl = new L.Control.Measure({
+            position: 'topleft',
+            primaryLengthUnit: 'meters',
+            secondaryLengthUnit: 'kilometers',
+            primaryAreaUnit: 'sqmeters',
+            secondaryAreaUnit: 'hectares'
+        });
+        measureControl.addTo(map);
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0]
+        .innerHTML = '';
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0]
+        .className += ' fas fa-ruler';
         var bounds_group = new L.featureGroup([]);
         function setBounds() {
         }
@@ -54,6 +81,18 @@
         layer_OpenStreetMap_0;
         map.addLayer(layer_OpenStreetMap_0);
         function pop_FERIAS_AGROubicacin_ferias_agroecolgicas_1(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
             var popupContent = '<table>\
                     <tr>\
                         <td colspan="2">' + (feature.properties['fid'] !== null ? autolinker.link(feature.properties['fid'].toLocaleString()) : '') + '</td>\
@@ -154,6 +193,174 @@
         bounds_group.addLayer(layer_FERIAS_AGROubicacin_ferias_agroecolgicas_1);
         map.addLayer(layer_FERIAS_AGROubicacin_ferias_agroecolgicas_1);
         setBounds();
+        map.addControl(new L.Control.Search({
+            layer: layer_FERIAS_AGROubicacin_ferias_agroecolgicas_1,
+            initial: false,
+            hideMarkerOnCollapse: true,
+            propertyName: 'Organización'}));
+        document.getElementsByClassName('search-button')[0].className +=
+         ' fa fa-binoculars';
+        var mapDiv = document.getElementById('map');
+        var row = document.createElement('div');
+        row.className="row";
+        row.id="all";
+        row.style.height = "100%";
+        var col1 = document.createElement('div');
+        col1.className="col9";
+        col1.id = "mapWindow";
+        col1.style.height = "99%";
+        col1.style.width = "80%";
+        col1.style.display = "inline-block";
+        var col2 = document.createElement('div');
+        col2.className="col3";
+        col2.id = "menu";
+        col2.style.display = "inline-block";
+        mapDiv.parentNode.insertBefore(row, mapDiv);
+        document.getElementById("all").appendChild(col1);
+        document.getElementById("all").appendChild(col2);
+        col1.appendChild(mapDiv)
+        var Filters = {"Organización": "str"};
+        function filterFunc() {
+          map.eachLayer(function(lyr){
+          if ("options" in lyr && "dataVar" in lyr["options"]){
+            features = this[lyr["options"]["dataVar"]].features.slice(0);
+            try{
+              for (key in Filters){
+                keyS = key.replace(/[^a-zA-Z0-9_]/g, "")
+                if (Filters[key] == "str" || Filters[key] == "bool"){
+                  var selection = [];
+                  var options = document.getElementById("sel_" + keyS).options
+                  for (var i=0; i < options.length; i++) {
+                    if (options[i].selected) selection.push(options[i].value);
+                  }
+                    try{
+                      if (key in features[0].properties){
+                        for (i = features.length - 1;
+                          i >= 0; --i){
+                          if (selection.indexOf(
+                          features[i].properties[key])<0
+                          && selection.length>0) {
+                          features.splice(i,1);
+                          }
+                        }
+                      }
+                    } catch(err){
+                  }
+                }
+                if (Filters[key] == "int"){
+                  sliderVals =  document.getElementById(
+                    "div_" + keyS).noUiSlider.get();
+                  try{
+                    if (key in features[0].properties){
+                    for (i = features.length - 1; i >= 0; --i){
+                      if (parseInt(features[i].properties[key])
+                          < sliderVals[0]
+                          || parseInt(features[i].properties[key])
+                          > sliderVals[1]){
+                            features.splice(i,1);
+                          }
+                        }
+                      }
+                    } catch(err){
+                    }
+                  }
+                if (Filters[key] == "real"){
+                  sliderVals =  document.getElementById(
+                    "div_" + keyS).noUiSlider.get();
+                  try{
+                    if (key in features[0].properties){
+                    for (i = features.length - 1; i >= 0; --i){
+                      if (features[i].properties[key]
+                          < sliderVals[0]
+                          || features[i].properties[key]
+                          > sliderVals[1]){
+                            features.splice(i,1);
+                          }
+                        }
+                      }
+                    } catch(err){
+                    }
+                  }
+                if (Filters[key] == "date"
+                  || Filters[key] == "datetime"
+                  || Filters[key] == "time"){
+                  try{
+                    if (key in features[0].properties){
+                      HTMLkey = key.replace(/[&\/\\#,+()$~%.'":*?<>{} ]/g, '');
+                      startdate = document.getElementById("dat_" +
+                        HTMLkey + "_date1").value.replace(" ", "T");
+                      enddate = document.getElementById("dat_" +
+                        HTMLkey + "_date2").value.replace(" ", "T");
+                      for (i = features.length - 1; i >= 0; --i){
+                        if (features[i].properties[key] < startdate
+                          || features[i].properties[key] > enddate){
+                          features.splice(i,1);
+                        }
+                      }
+                    }
+                  } catch(err){
+                  }
+                }
+              }
+            } catch(err){
+            }
+          this[lyr["options"]["layerName"]].clearLayers();
+          this[lyr["options"]["layerName"]].addData(features);
+          }
+          })
+        }
+            document.getElementById("menu").appendChild(
+                document.createElement("div"));
+            var div_Organizacin = document.createElement('div');
+            div_Organizacin.id = "div_Organizacin";
+            div_Organizacin.className= "filterselect";
+            document.getElementById("menu").appendChild(div_Organizacin);
+            sel_Organizacin = document.createElement('select');
+            sel_Organizacin.multiple = true;
+            sel_Organizacin.size = 10;
+            sel_Organizacin.id = "sel_Organizacin";
+            var Organizacin_options_str = "<option value='' unselected></option>";
+            sel_Organizacin.onchange = function(){filterFunc()};
+            Organizacin_options_str  += '<option value="13 organizaciones Feria La Remonta">13 organizaciones Feria La Remonta</option>';
+            Organizacin_options_str  += '<option value="ASOPROK">ASOPROK</option>';
+            Organizacin_options_str  += '<option value="Cariacu">Cariacu</option>';
+            Organizacin_options_str  += '<option value="Feria Agroecológica BIOVIDA">Feria Agroecológica BIOVIDA</option>';
+            Organizacin_options_str  += '<option value="Feria Agroecológica Cuniburo">Feria Agroecológica Cuniburo</option>';
+            Organizacin_options_str  += '<option value="Feria Agroecológica La Buena Esperanza">Feria Agroecológica La Buena Esperanza</option>';
+            Organizacin_options_str  += '<option value="Feria Agroecológica La Campesina">Feria Agroecológica La Campesina</option>';
+            Organizacin_options_str  += '<option value="Feria Agroecológica Muyurku">Feria Agroecológica Muyurku</option>';
+            Organizacin_options_str  += '<option value="Feria Agroecológica Productoras Cangahua">Feria Agroecológica Productoras Cangahua</option>';
+            Organizacin_options_str  += '<option value="Feria Agroecológica Santa Marianita Pingulmí">Feria Agroecológica Santa Marianita Pingulmí</option>';
+            Organizacin_options_str  += '<option value="Feria Agroecológica UNOPAC">Feria Agroecológica UNOPAC</option>';
+            Organizacin_options_str  += '<option value="Feria Agroecológica de Otón ">Feria Agroecológica de Otón </option>';
+            Organizacin_options_str  += '<option value="Feria Agroecológica del Campo a la ciudad">Feria Agroecológica del Campo a la ciudad</option>';
+            Organizacin_options_str  += '<option value="Feria Agropecuaria de Olmedo">Feria Agropecuaria de Olmedo</option>';
+            Organizacin_options_str  += '<option value="Feria Agroproductiva Ayora Centro">Feria Agroproductiva Ayora Centro</option>';
+            Organizacin_options_str  += '<option value="Feria Agroproductiva Paquiestancia">Feria Agroproductiva Paquiestancia</option>';
+            Organizacin_options_str  += '<option value="Feria Agroproductiva San Luis de Guachalá">Feria Agroproductiva San Luis de Guachalá</option>';
+            Organizacin_options_str  += '<option value="Feria Agroproductiva San Pablo Urcu">Feria Agroproductiva San Pablo Urcu</option>';
+            Organizacin_options_str  += '<option value="Feria Agroproductiva Santa Rosa de Ayora">Feria Agroproductiva Santa Rosa de Ayora</option>';
+            Organizacin_options_str  += '<option value="Feria Agroproductiva de Olmedo">Feria Agroproductiva de Olmedo</option>';
+            Organizacin_options_str  += '<option value="Feria Agroproductiva y Agroecológica Juan Montalvo">Feria Agroproductiva y Agroecológica Juan Montalvo</option>';
+            Organizacin_options_str  += '<option value="Feria agroecológica de Rumiloma">Feria agroecológica de Rumiloma</option>';
+            Organizacin_options_str  += '<option value="UCICAP">UCICAP</option>';
+            sel_Organizacin.innerHTML = Organizacin_options_str;
+            div_Organizacin.appendChild(sel_Organizacin);
+            var lab_Organizacin = document.createElement('div');
+            lab_Organizacin.innerHTML = 'Organización';
+            lab_Organizacin.className = 'filterlabel';
+            div_Organizacin.appendChild(lab_Organizacin);
+            var reset_Organizacin = document.createElement('div');
+            reset_Organizacin.innerHTML = 'clear filter';
+            reset_Organizacin.className = 'filterlabel';
+            reset_Organizacin.onclick = function() {
+                var options = document.getElementById("sel_Organizacin").options;
+                for (var i=0; i < options.length; i++) {
+                    options[i].selected = false;
+                }
+                filterFunc();
+            };
+            div_Organizacin.appendChild(reset_Organizacin);
         </script>
     </body>
 </html>
